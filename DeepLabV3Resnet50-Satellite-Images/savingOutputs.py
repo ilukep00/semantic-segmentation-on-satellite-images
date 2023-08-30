@@ -36,17 +36,34 @@ transformImg = tf.Compose([tf.ToPILImage(mode='RGB'),tf.ToTensor()])
 # Para cualquier dataset practico, entrenar usando la CPU es extremadamente lento.
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-def preparingNet(modelPath,numClusters):
+def preparingNet_deeplab(modelPath,numClusters):
+    # A continuación, cargamos la segmentación semántica de deep lab net:
+    Net = torchvision.models.segmentation.deeplabv3_resnet50(pretrained=False)
+
+    # antes con deeplab era 256 en vez de 512 con fcn
+    # Queremos reemplazar la ultima capa convolucional con 21 neuronas de salida por una que tenga 5 neuronas de salida:
+    Net.classifier[4] = torch.nn.Conv2d(256, numClusters, kernel_size=(1, 1), stride=(1, 1))
+
+    Net = Net.to(device)  # Set net to GPU or CPU
+
+    # Cargamos el modelo entrenado y cargado anteriormente en el archivo modelPath
+    Net.load_state_dict(torch.load(modelPath))
+
+    # Convertimos la red del modo entrenamiento al modo evaluacion.
+    # Esto indica que no se calcularán estadísticas de normalización de lotes.
+    Net.eval()
+    return Net
+def preparingNet_fcn(modelPath,numClusters):
     # A continuación, cargamos la segmentación semántica de deep lab net:
     #Net = torchvision.models.segmentation.deeplabv3_resnet50(pretrained=False)
     Net = torchvision.models.segmentation.fcn_resnet50(pretrained=False)
 
-    # Queremos reemplazar la ultima capa convolucional con 21 neuronas de salida por una que tenga 5 neuronas de salida:
-    #numero de clusters (5)
     # antes con deeplab era 256 en vez de 512 con fcn
+    # Queremos reemplazar la ultima capa convolucional con 21 neuronas de salida por una que tenga 5 neuronas de salida:
     Net.classifier[4] = torch.nn.Conv2d(512, numClusters, kernel_size=(1, 1), stride=(1, 1))
 
     Net = Net.to(device)  # Set net to GPU or CPU
+
 
     # Cargamos el modelo entrenado y cargado anteriormente en el archivo modelPath
     Net.load_state_dict(torch.load(modelPath))
@@ -241,12 +258,40 @@ def saveRealImageLabeledVsLabelImgInColor(seg,imageName,pathFolder):
         saveTwoColorImagesWithColorLegend_v3(realOutput, predOutput, values3D, imageName, pathFolder, "outputsTestingvsRealOutput_color")
 
 def outputTesting_color(ListImages,pathFolder,modelPath):
-    Net = preparingNet(modelPath,5)
+    version = modelPath.split("/")[0].split("_")[1]  # version de la imagen
+    if "deeplab" in modelPath:
+        if version == 'v1':
+            #Preparando la red neuronal deeplab para version 1 de clases
+            Net = preparingNet_deeplab(modelPath, 3)
+        else:
+            # Preparando la red neuronal
+            Net = preparingNet_deeplab(modelPath, 5)
+    elif "fcn" in modelPath:
+        if version == 'v1':
+            # Preparando la red neuronal deeplab para version 1 de clases
+            Net = preparingNet_fcn(modelPath, 3)
+        else:
+            # Preparando la red neuronal
+            Net = preparingNet_fcn(modelPath, 5)
     for imageName in ListImages:
         saveRealImageVsLabelImgInColor(predNetOfImg(imageName,Net,pathFolder),imageName,pathFolder)
 
 def outputTestingVsRealOutput_color(ListImages,pathFolder,modelPath):
-    Net = preparingNet(modelPath, 5)
+    version = modelPath.split("/")[0].split("_")[1]  # version de la imagen
+    if "deeplab" in modelPath:
+        if version == 'v1':
+            # Preparando la red neuronal deeplab para version 1 de clases
+            Net = preparingNet_deeplab(modelPath, 3)
+        else:
+            # Preparando la red neuronal
+            Net = preparingNet_deeplab(modelPath, 5)
+    elif "fcn" in modelPath:
+        if version == 'v1':
+            # Preparando la red neuronal deeplab para version 1 de clases
+            Net = preparingNet_fcn(modelPath, 3)
+        else:
+            # Preparando la red neuronal
+            Net = preparingNet_fcn(modelPath, 5)
     for imageName in ListImages:
         saveRealImageLabeledVsLabelImgInColor(predNetOfImg(imageName, Net, pathFolder), imageName, pathFolder)
 
